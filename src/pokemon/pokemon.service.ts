@@ -9,13 +9,19 @@ import { UpdatePokemonDto } from './dto/update-pokemon.dto';
 import { Model, isValidObjectId } from 'mongoose';
 import { Pokemon } from './entities/pokemon.entity';
 import { InjectModel } from '@nestjs/mongoose';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PokemonService {
+  private defaultLimit: number;
   constructor(
     @InjectModel(Pokemon.name)
-    private readonly pokemonModel: Model<Pokemon>
-  ) {}
+    private readonly pokemonModel: Model<Pokemon>,
+    private readonly configService: ConfigService
+  ) {
+    this.defaultLimit = configService.get('defaultLimit');
+  }
   async create(createPokemonDto: CreatePokemonDto) {
     createPokemonDto.name = createPokemonDto.name.toLocaleLowerCase();
     try {
@@ -26,14 +32,22 @@ export class PokemonService {
     }
   }
 
-  async findAll() {
-    return await this.pokemonModel.find();
+  findAll(paginatioDto: PaginationDto) {
+    const { limit = this.defaultLimit, offset = 0 } = paginatioDto;
+    return this.pokemonModel
+      .find()
+      .limit(limit)
+      .skip(offset)
+      .sort({
+        no: 1,
+      })
+      .select('-__v');
   }
 
   async findOne(term: string) {
     let pokemon: Pokemon;
     if (!isNaN(+term)) {
-      pokemon = await this.pokemonModel.findOne({ no: term });
+      pokemon = await this.pokemonModel.findOne({ no: term }).select('-__v');
     }
 
     if (!pokemon && isValidObjectId(term)) {
@@ -81,5 +95,9 @@ export class PokemonService {
     }
     console.log(error);
     throw new InternalServerErrorException(`Can't update Pokemon - Check server logs`);
+  }
+
+  fillPokemonsWithSeed(pokemons: Pokemon[]) {
+    this.pokemonModel.insertMany(pokemons);
   }
 }
